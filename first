@@ -1,0 +1,90 @@
+import pandas as pd
+import re
+import kss
+from konlpy.tag import Okt
+from stopwordsiso import stopwords
+from chatterbot import ChatBot
+from chatterbot.trainers import ListTrainer
+from datetime import datetime
+
+# 형태소 분석기 객체 생성
+okt = Okt()
+
+# 불용어 사전을 확인합니다.
+print(stopwords(["ko"]))
+
+# CSV 파일 경로
+csv_file_path = r'C:\Users\beana\PycharmProjects\pythonProject\.venv\DATASET\20240428_Suicide_test.csv'
+
+# CSV 파일 읽어오기
+df = pd.read_csv(csv_file_path)
+
+# 데이터 정제 함수
+def clean_text(text):
+    cleaned_text = re.sub("[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\\s]", "", text)
+    return cleaned_text
+
+# 데이터 형식 통일 함수
+def normalize_text(text):
+    normalized_text = text.lower()
+    normalized_text = re.sub(r"\s+", " ", normalized_text)
+    normalized_text = normalized_text.strip()
+    return normalized_text
+
+
+# 띄어쓰기 교정 함수 (KSS 활용)
+def correct_spacing(text):
+    spaced_text = ' '.join(kss.split_sentences(text))
+    return spaced_text
+
+# 전처리 함수
+def preprocess_text(text):
+    cleaned_text = clean_text(text)
+    normalized_text = normalize_text(cleaned_text)
+    corrected_spacing_text = correct_spacing(normalized_text)
+    return corrected_spacing_text
+
+
+# ChatBot 인스턴스 생성
+bot = ChatBot("김미나")
+
+# 대화 데이터를 ListTrainer에 입력하여 훈련
+trainer = ListTrainer(bot)
+
+# 전처리된 데이터를 사용하여 훈련
+for index, row in df.iterrows():
+    question = row["input_text"]
+    response = row["response"]
+    trainer.train([question, response])
+
+# 대화 데이터를 저장할 리스트
+conversation_data = []
+
+# 챗봇과 사용자 간의 대화 기록을 저장할 빈 리스트
+conversation_history = []
+
+# 대화하기
+while True:
+    user_input = input("한의사: ")
+    response = bot.get_response(user_input)
+
+    # 챗봇의 응답 출력
+    print("김미나:", response)
+
+    # 사용자가 챗봇의 응답에 대해 평가
+    evaluation = input("이 응답이 적절합니까? (y/n): ")
+
+    # 챗봇의 응답이 적절하지 않은 경우
+    if evaluation.lower() == 'n':
+        # 사용자 입력과 챗봇의 응답을 conversation_history에 추가
+        conversation_history.append({'input_text': user_input, 'response': response})
+
+    # 현재 시간을 가져와서 문자열로 변환
+    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+
+    # 사용자가 종료를 원하면 대화를 종료하고 대화 기록을 CSV 파일로 저장
+    if user_input == "종료":
+        print("챗봇과의 대화를 종료합니다.")
+        df = pd.DataFrame(conversation_history)
+        df.to_csv(f'conversation_history_{current_time}.csv', index=False)
+        break
